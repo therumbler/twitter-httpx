@@ -1,4 +1,5 @@
 """asyncio TWitter library using HTTPX"""
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -11,6 +12,8 @@ import time
 from urllib.parse import urlparse, quote, urlencode
 
 import httpx
+
+__all__ = ['get_status']
 
 BASE_URL = "https://api.twitter.com/1.1"
 
@@ -68,7 +71,6 @@ def _create_header_string(params: dict, resource_url):
 
     header_string = "OAuth "
     for k, v in sorted(parameters.items()):
-        print(k[:6])
         if k[:6] == "oauth_" and len(str(v)) > 0 and "callback" not in str(v):
             header_string += '%s="%s", ' % (quote(k), quote(v, ""))
 
@@ -77,14 +79,38 @@ def _create_header_string(params: dict, resource_url):
     return header_string
 
 
+def _check_rate_limiting(headers):
+    """returns a number of seconds to sleep"""
+    rate_limit_remaining = int(headers["x-rate-limit-remaining"])
+    rate_limit_reset = int(headers["x-rate-limit-reset"])
+    if rate_limit_remaining > 100:
+        return 0
+
+    seconds_remaining = rate_limit_reset - int(time.time())
+    sleep_seconds = int(seconds_remaining / rate_limit_remaining)
+    logger.debug("rate_limit_remaining: %d, seconds_remaining: %d, sleep_seconds: %d", rate_limit_remaining, seconds_remaining, sleep_seconds)
+    if rate_limit_remaining < 20:
+        logger.warning("%d remaining requests for the next %d seconds", rate_limit_remaining, seconds_remaining)
+
+    return sleep_seconds
+
 async def _call(client: httpx.AsyncClient, endpoint: str, **params):
     resource_url = f'{BASE_URL}/{endpoint}'
     headers = {
         "Authorization": _create_header_string(params, resource_url),
     }
     resp = await client.get(f"{BASE_URL}/{endpoint}", params=params, headers=headers)
-    logger.debug("got response from %s", str(dir(resp)))
-    logger.debug("got %s response from %s", resp.status_code, resp.url)
+    logger.info("got %s response from %s", resp.status_code, resp.url)
+    if resp.status_code >= 400:
+        logger.error('resp = %s', resp.json())
+    if resp.status_code == 429:
+        logger.error('rate limited')
+        resp.raise_for_status()
+
+    sleep_seconds = _check_rate_limiting(resp.headers)
+    if sleep_seconds > 0:
+        logger.warn('Slowing things down by %d seconds', sleep_seconds)
+        await asyncio.sleep(sleep_seconds)
 
     return resp.json()
 
