@@ -13,7 +13,7 @@ from urllib.parse import urlparse, quote, urlencode
 
 import httpx
 
-__all__ = ['get_status']
+__all__ = ['get_status', 'lookup']
 
 BASE_URL = "https://api.twitter.com/1.1"
 
@@ -118,6 +118,12 @@ async def _call(client: httpx.AsyncClient, endpoint: str, **params):
 async def get_status(client, id: int):
     return await _call(client, "statuses/show.json", id=id)
 
+async def lookup(client, ids: list):
+    """lookup a bunch of ids at once"""
+    if len(ids) > 100:
+        raise ValueError('you cannot look up more than 100 ids')
+    ids_str = ','.join(ids)
+    return await _call(client, "statuses/lookup.json", id=ids_str)
 
 async def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
