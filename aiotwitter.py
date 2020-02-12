@@ -143,6 +143,14 @@ async def _call(client: httpx.AsyncClient, endpoint: str, **params):
     return resp.json()
 
 
+async def _generate_bearer_token(client):
+    """generate bearer token"""
+    url = "https://api.twitter.com/oauth2/token"
+    data = {'grant_type':'client_credentials'}
+    auth = (os.environ['TWITTER_CONSUMER_KEY'], os.environ['TWITTER_CONSUMER_SECRET'])
+    resp = await client.post(url, auth=auth, data=data)
+    return resp.json()
+
 async def get_status(client, id: int):
     return await _call(client, "statuses/show.json", id=id)
 
@@ -158,6 +166,9 @@ async def lookup(client, ids: list):
 async def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     async with httpx.AsyncClient() as client:
+        token = await _generate_bearer_token(client)
+        logger.info(token)
+        return
         status = await get_status(client, 1172798764408614912)
         logger.debug(status)
 
