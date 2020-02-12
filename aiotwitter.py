@@ -125,7 +125,7 @@ def _check_rate_limiting(headers):
 async def _call(client: httpx.AsyncClient, endpoint: str, **params):
     resource_url = f"{BASE_URL}/{endpoint}"
     headers = {
-        "Authorization": _create_header_string(params, resource_url, 'GET'),
+        "Authorization": _create_header_string(params, resource_url, "GET"),
     }
     resp = await client.get(f"{BASE_URL}/{endpoint}", params=params, headers=headers)
     logger.info("got %s response from %s", resp.status_code, resp.url)
@@ -172,20 +172,22 @@ async def stream(track):
         data = {"delimited": "length", "track": track}
         headers = {
             "Authorization": _create_header_string(data, url, "POST"),
-            #"Authorization": f"Bearer {token['access_token']}",
+            # "Authorization": f"Bearer {token['access_token']}",
         }
-        logger.info('headers = %s', headers)
-        logger.info('data = %s', data)
-    async with client.stream("POST", url, data=data, headers=headers, timeout=30) as resp:
-            async for line in resp.aiter_lines():
-                logger.info("line = %s", line)
-                yield line
+        logger.info("headers = %s", headers)
+        logger.info("data = %s", data)
+    async with client.stream(
+        "POST", url, data=data, headers=headers, timeout=30
+    ) as resp:
+        async for line in resp.aiter_lines():
+            logger.info("line = %s", line)
+            yield line
 
 
 async def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-    async for tweet in stream(track='trump'):
-        logger.info('tweet = %s', tweet)
+    async for tweet in stream(track="trump"):
+        logger.info("tweet = %s", tweet)
     return
     async with httpx.AsyncClient() as client:
         status = await get_status(client, 1172798764408614912)
