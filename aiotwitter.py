@@ -62,7 +62,7 @@ def _create_signature(parameters, http_method, resource_url):
     )
 
 
-def _create_header_string(params: dict, resource_url):
+def _create_header_string(params: dict, resource_url, http_method):
     """
     https://developer.twitter.com/en/docs/basics/authentication/oauth-1-0a/authorizing-a-request
     """
@@ -84,7 +84,7 @@ def _create_header_string(params: dict, resource_url):
         parameters[k] = v
 
     parameters["oauth_signature"] = _create_signature(
-        parameters, http_method="GET", resource_url=resource_url
+        parameters, http_method=http_method, resource_url=resource_url
     )
 
     header_string = "OAuth "
@@ -125,7 +125,7 @@ def _check_rate_limiting(headers):
 async def _call(client: httpx.AsyncClient, endpoint: str, **params):
     resource_url = f"{BASE_URL}/{endpoint}"
     headers = {
-        "Authorization": _create_header_string(params, resource_url),
+        "Authorization": _create_header_string(params, resource_url, 'GET'),
     }
     resp = await client.get(f"{BASE_URL}/{endpoint}", params=params, headers=headers)
     logger.info("got %s response from %s", resp.status_code, resp.url)
@@ -146,10 +146,11 @@ async def _call(client: httpx.AsyncClient, endpoint: str, **params):
 async def _generate_bearer_token(client):
     """generate bearer token"""
     url = "https://api.twitter.com/oauth2/token"
-    data = {'grant_type':'client_credentials'}
-    auth = (os.environ['TWITTER_CONSUMER_KEY'], os.environ['TWITTER_CONSUMER_SECRET'])
+    data = {"grant_type": "client_credentials"}
+    auth = (os.environ["TWITTER_CONSUMER_KEY"], os.environ["TWITTER_CONSUMER_SECRET"])
     resp = await client.post(url, auth=auth, data=data)
     return resp.json()
+
 
 async def get_status(client, id: int):
     return await _call(client, "statuses/show.json", id=id)
@@ -163,12 +164,30 @@ async def lookup(client, ids: list):
     return await _call(client, "statuses/lookup.json", id=ids_str)
 
 
-async def main():
-    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+async def stream(track):
+    """stream something"""
     async with httpx.AsyncClient() as client:
         token = await _generate_bearer_token(client)
-        logger.info(token)
-        return
+        url = "https://stream.twitter.com/1.1/statuses/filter.json"
+        data = {"delimited": "length", "track": track}
+        headers = {
+            "Authorization": _create_header_string(data, url, "POST"),
+            #"Authorization": f"Bearer {token['access_token']}",
+        }
+        logger.info('headers = %s', headers)
+        logger.info('data = %s', data)
+    async with client.stream("POST", url, data=data, headers=headers, timeout=30) as resp:
+            async for line in resp.aiter_lines():
+                logger.info("line = %s", line)
+                yield line
+
+
+async def main():
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    async for tweet in stream(track='trump'):
+        logger.info('tweet = %s', tweet)
+    return
+    async with httpx.AsyncClient() as client:
         status = await get_status(client, 1172798764408614912)
         logger.debug(status)
 
